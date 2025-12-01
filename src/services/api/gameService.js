@@ -1,11 +1,15 @@
 import gameHistoryData from "@/services/mockData/gameHistory.json"
 
 class GameService {
-  constructor() {
+constructor() {
+    // WebSocket properties
     this.socket = null
     this.roomId = null
     this.playerRole = null
     this.eventListeners = new Map()
+    
+    // Game history properties
+    this.gameHistory = [...gameHistoryData]
   }
 
   // WebSocket connection management
@@ -107,9 +111,6 @@ class GameService {
     this.roomId = null
     this.playerRole = null
     this.eventListeners.clear()
-  }
-  constructor() {
-    this.gameHistory = [...gameHistoryData]
   }
 
   delay(ms = 300) {
