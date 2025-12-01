@@ -270,7 +270,6 @@ apper.serve(async (req) => {
       }
     }
     
-    // Handle HTTP requests
 // Handle GET requests for polling and room info
     if (req.method === 'GET') {
       const action = url.searchParams.get('action')
@@ -352,12 +351,11 @@ apper.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' }
     })
     
-  } catch (error) {
-    console.error('Edge function error:', error)
-    
+} catch (error) {
     return new Response(JSON.stringify({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: error.message
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
