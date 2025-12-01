@@ -88,10 +88,12 @@ function makeMove(roomId, playerId, position) {
   
   // Check for winner
   const winner = checkWinner(gameState.board)
-  if (winner) {
+if (winner) {
     gameState.winner = winner.symbol
     gameState.winningLine = winner.line
-gameState.isDraw = true
+  } else if (gameState.moveCount >= 9) {
+    // Check for draw - all positions filled, no winner
+    gameState.isDraw = true
   }
   
   // Switch to next player
