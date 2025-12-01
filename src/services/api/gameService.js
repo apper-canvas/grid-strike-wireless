@@ -3,86 +3,203 @@ import gameHistoryData from "@/services/mockData/gameHistory.json"
 class GameService {
 constructor() {
     // WebSocket properties
-    this.socket = null
-    this.roomId = null
-    this.playerRole = null
+this.currentRoomId = null
+    this.playerId = null
+    this.pollingInterval = null
+    this.lastRoomUpdate = 0
     this.eventListeners = new Map()
-    
     // Game history properties
     this.gameHistory = [...gameHistoryData]
   }
 
   // WebSocket connection management
-  connectToRoom(roomId, playerRole) {
+async createRoom() {
     try {
-      // Initialize WebSocket connection
-      // In real implementation, this would connect to the room-websocket Edge Function
-      this.roomId = roomId
-      this.playerRole = playerRole
-      
-      // Simulate WebSocket connection
-      console.log(`Connecting to room ${roomId} as player ${playerRole}`)
-      
-      return true
+      const { ApperClient } = window.ApperSDK
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      })
+
+      const result = await apperClient.functions.invoke(import.meta.env.VITE_ROOM_WEBSOCKET, {
+        body: JSON.stringify({
+          action: 'CREATE_ROOM',
+          playerId: this.playerId || `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (result.success) {
+        this.currentRoomId = result.data.id
+        this.playerId = result.data.players[0].id
+        this.startPolling()
+        return result.data
+      } else {
+        throw new Error(result.message)
+      }
     } catch (error) {
-      console.error('Failed to connect to room:', error)
-      return false
+      console.info(`apper_info: Got this error an this function: ${import.meta.env.VITE_ROOM_WEBSOCKET}. The error is: ${error.message}`)
+      throw error
+    }
+  }
+
+  async joinRoom(roomId, playerId = null) {
+    try {
+      const { ApperClient } = window.ApperSDK
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      })
+
+      this.playerId = playerId || `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+      const result = await apperClient.functions.invoke(import.meta.env.VITE_ROOM_WEBSOCKET, {
+        body: JSON.stringify({
+          action: 'JOIN_ROOM',
+          roomId,
+          playerId: this.playerId
+        }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (result.success) {
+        this.currentRoomId = roomId
+        this.startPolling()
+        return result.data
+      } else {
+        throw new Error(result.message)
+      }
+    } catch (error) {
+      console.info(`apper_info: Got this error an this function: ${import.meta.env.VITE_ROOM_WEBSOCKET}. The error is: ${error.message}`)
+      throw error
+    }
+  }
+
+  startPolling() {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval)
+    }
+
+    this.pollingInterval = setInterval(async () => {
+      try {
+        await this.pollRoomState()
+      } catch (error) {
+        console.error('Polling error:', error)
+      }
+    }, 1000) // Poll every second
+  }
+
+  async pollRoomState() {
+    if (!this.currentRoomId) return
+
+    try {
+      const { ApperClient } = window.ApperSDK
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      })
+
+      const result = await apperClient.functions.invoke(import.meta.env.VITE_ROOM_WEBSOCKET, {
+        body: null,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      // Build query string for GET request
+      const queryParams = new URLSearchParams({
+        action: 'room-state',
+        roomId: this.currentRoomId,
+        lastUpdate: this.lastRoomUpdate.toString()
+      })
+
+      const response = await fetch(`${import.meta.env.VITE_APPER_PROJECT_URL || ''}?${queryParams}`)
+      const data = await response.json()
+
+      if (data.success && data.hasUpdate && data.data) {
+        const { room, timestamp } = data.data
+        this.lastRoomUpdate = timestamp
+
+        // Trigger appropriate events based on activity type
+        const callback = this.eventListeners.get('roomUpdate')
+        if (callback) {
+          callback(room)
+        }
+      }
+    } catch (error) {
+      console.info(`apper_info: Got this error an this function: ${import.meta.env.VITE_ROOM_WEBSOCKET}. The error is: ${error.message}`)
     }
   }
 
   // Send move to other players
-  async sendMove(roomId, moveData) {
-    if (!this.socket) {
-      console.warn('No WebSocket connection available')
-      return false
-    }
-
+async sendMove(roomId, position) {
     try {
-      // In real implementation, send via WebSocket to room-websocket Edge Function
-      const message = {
-        type: 'PLAYER_MOVE',
-        roomId,
-        data: moveData,
-        timestamp: Date.now()
+      const { ApperClient } = window.ApperSDK
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      })
+
+      const result = await apperClient.functions.invoke(import.meta.env.VITE_ROOM_WEBSOCKET, {
+        body: JSON.stringify({
+          action: 'MAKE_MOVE',
+          roomId,
+          playerId: this.playerId,
+          position
+        }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (result.success) {
+        return result.data
+      } else {
+        throw new Error(result.message)
       }
-      
-      console.log('Sending move:', message)
-      // this.socket.send(JSON.stringify(message))
-      
-      return true
     } catch (error) {
-      console.error('Failed to send move:', error)
+      console.info(`apper_info: Got this error an this function: ${import.meta.env.VITE_ROOM_WEBSOCKET}. The error is: ${error.message}`)
       return false
     }
   }
 
-  // Request new game
-  async requestNewGame(roomId) {
-    if (!this.socket) {
-      console.warn('No WebSocket connection available')
-      return false
-    }
-
+async requestNewGame(roomId) {
     try {
-      const message = {
-        type: 'NEW_GAME_REQUEST',
-        roomId,
-        timestamp: Date.now()
+      const { ApperClient } = window.ApperSDK
+      const apperClient = new ApperClient({
+        apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+        apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+      })
+
+      const result = await apperClient.functions.invoke(import.meta.env.VITE_ROOM_WEBSOCKET, {
+        body: JSON.stringify({
+          action: 'NEW_GAME',
+          roomId,
+          playerId: this.playerId
+        }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (result.success) {
+        return result.data
+      } else {
+        throw new Error(result.message)
       }
-      
-      console.log('Requesting new game:', message)
-      // this.socket.send(JSON.stringify(message))
-      
-      return true
     } catch (error) {
-      console.error('Failed to request new game:', error)
+      console.info(`apper_info: Got this error an this function: ${import.meta.env.VITE_ROOM_WEBSOCKET}. The error is: ${error.message}`)
       return false
     }
   }
 
   // Event listeners for multiplayer events
-  onOpponentMove(callback) {
-    this.eventListeners.set('opponentMove', callback)
+onRoomUpdate(callback) {
+    this.eventListeners.set('roomUpdate', callback)
   }
 
   onPlayerDisconnect(callback) {
@@ -103,13 +220,13 @@ constructor() {
   }
 
   // Disconnect from room
-  disconnect() {
-    if (this.socket) {
-      this.socket.close()
-      this.socket = null
+disconnect() {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval)
+      this.pollingInterval = null
     }
-    this.roomId = null
-    this.playerRole = null
+    this.currentRoomId = null
+    this.playerId = null
     this.eventListeners.clear()
   }
 

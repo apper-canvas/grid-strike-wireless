@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react"
-import { useParams, useNavigate } from "react-router-dom"
-import { motion, AnimatePresence } from "framer-motion"
-import { toast } from "react-toastify"
-import GameInterface from "@/components/organisms/GameInterface"
-import { Card } from "@/components/atoms/Card"
-import Button from "@/components/atoms/Button"
-import ApperIcon from "@/components/ApperIcon"
-import Loading from "@/components/ui/Loading"
+import React, { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { toast } from "react-toastify";
+import { Card } from "@/components/atoms/Card";
+import ApperIcon from "@/components/ApperIcon";
+import Loading from "@/components/ui/Loading";
+import Button from "@/components/atoms/Button";
+import GameInterface from "@/components/organisms/GameInterface";
+import { gameService } from "@/services/gameService";
 
 const GameRoom = () => {
   const { roomId } = useParams()
@@ -20,32 +21,29 @@ const GameRoom = () => {
     waitingForPlayer: true
   })
 
-  useEffect(() => {
-    // Simulate connecting to room
+useEffect(() => {
     const connectToRoom = async () => {
       try {
         setRoomState(prev => ({ ...prev, isLoading: true }))
         
-        // Simulate connection delay
-        await new Promise(resolve => setTimeout(resolve, 2000))
+        // Join the room using polling-based service
+        const room = await gameService.joinRoom(roomId)
         
-        // Simulate joining as second player if room has 1 player
-        const isSecondPlayer = Math.random() > 0.3 // 70% chance of being second player
+        const currentPlayer = room.players.find(p => p.id === gameService.playerId)
+        const playerRole = currentPlayer ? currentPlayer.symbol : null
         
         setRoomState(prev => ({
           ...prev,
           isLoading: false,
           isConnected: true,
-          players: isSecondPlayer ? 
-            [{ id: 'player1', name: 'Player 1', symbol: 'X' }, { id: 'player2', name: 'You', symbol: 'O' }] :
-            [{ id: 'player1', name: 'You', symbol: 'X' }],
-          playerRole: isSecondPlayer ? 'O' : 'X',
-          gameStarted: isSecondPlayer,
-          waitingForPlayer: !isSecondPlayer
+          players: room.players,
+          playerRole: playerRole,
+          gameStarted: room.players.length === 2,
+          waitingForPlayer: room.players.length < 2
         }))
 
-        if (isSecondPlayer) {
-          toast.success("🎮 Game started! You are playing as O", {
+        if (room.players.length === 2) {
+          toast.success(`🎮 Game started! You are playing as ${playerRole}`, {
             position: "top-right",
             autoClose: 3000
           })
@@ -54,22 +52,26 @@ const GameRoom = () => {
             position: "top-right",
             autoClose: 3000
           })
-          
-          // Simulate second player joining after some time
-          setTimeout(() => {
-            setRoomState(prev => ({
-              ...prev,
-              players: [...prev.players, { id: 'player2', name: 'Player 2', symbol: 'O' }],
-              gameStarted: true,
-              waitingForPlayer: false
-            }))
-            
+        }
+
+        // Set up room update listener
+        gameService.onRoomUpdate((updatedRoom) => {
+          setRoomState(prev => ({
+            ...prev,
+            players: updatedRoom.players,
+            gameStarted: updatedRoom.players.length === 2,
+            waitingForPlayer: updatedRoom.players.length < 2
+          }))
+
+          // Notify when second player joins
+          if (updatedRoom.players.length === 2 && prev.players.length === 1) {
             toast.success("🎉 Player 2 joined! Game started!", {
               position: "top-right",
               autoClose: 3000
             })
-          }, 5000)
-        }
+          }
+        })
+
       } catch (error) {
         toast.error("Failed to connect to room", {
           position: "top-right",
@@ -82,8 +84,12 @@ const GameRoom = () => {
     if (roomId) {
       connectToRoom()
     }
-  }, [roomId, navigate])
 
+    // Cleanup polling on unmount
+    return () => {
+      gameService.disconnect()
+    }
+  }, [roomId, navigate])
   const handleLeaveRoom = () => {
     toast.info("👋 Leaving room...", {
       position: "top-right",

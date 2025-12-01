@@ -1,9 +1,7 @@
 import apper from 'https://cdn.apper.io/actions/apper-actions.js'
 
-// In-memory storage for active rooms and connections
+// In-memory storage for active rooms (no connections needed for polling)
 const rooms = new Map()
-const connections = new Map()
-
 function generateRoomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase()
 }
@@ -20,7 +18,10 @@ function createRoom(playerId) {
       isDraw: false,
       moveCount: 0
     },
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    lastActivity: Date.now(),
+    lastActivityType: 'created',
+    lastActivityData: null
   }
   
   rooms.set(roomId, room)
@@ -136,181 +137,173 @@ function resetGame(roomId) {
   return room
 }
 
-function broadcastToRoom(roomId, message, excludePlayerId = null) {
+// Update room's last activity timestamp for polling
+function updateRoomActivity(roomId, activityType = 'general', data = null) {
   const room = rooms.get(roomId)
   if (!room) return
   
-  room.players.forEach(player => {
-    if (player.id !== excludePlayerId) {
-      const connection = connections.get(player.id)
-      if (connection && connection.readyState === WebSocket.OPEN) {
-        try {
-          connection.send(JSON.stringify(message))
-        } catch (error) {
-          console.error('Failed to send message to player:', error)
-        }
-      }
-    }
-  })
+  room.lastActivity = Date.now()
+  room.lastActivityType = activityType
+  if (data) {
+    room.lastActivityData = data
+  }
 }
 
 apper.serve(async (req) => {
   try {
     const url = new URL(req.url)
     
-    // Handle WebSocket upgrade
-    if (req.headers.get('upgrade') === 'websocket') {
-      const { socket, response } = await apper.upgradeWebSocket(req)
+    // Handle POST requests for game actions
+    if (req.method === 'POST') {
+      const body = await req.json()
+      const action = body.action
+      const playerId = body.playerId || `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       
-      const playerId = url.searchParams.get('playerId') || `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      connections.set(playerId, socket)
-      
-      socket.onmessage = async (event) => {
-        try {
-          const message = JSON.parse(event.data)
-          
-          switch (message.type) {
-            case 'CREATE_ROOM':
-              try {
-                const room = createRoom(playerId)
-                socket.send(JSON.stringify({
-                  type: 'ROOM_CREATED',
-                  success: true,
-                  data: room
-                }))
-              } catch (error) {
-                socket.send(JSON.stringify({
-                  type: 'ERROR',
-                  success: false,
-                  message: error.message
-                }))
-              }
-              break
-              
-            case 'JOIN_ROOM':
-              try {
-                const room = joinRoom(message.roomId, playerId)
-                
-                // Notify player they joined
-                socket.send(JSON.stringify({
-                  type: 'ROOM_JOINED',
-                  success: true,
-                  data: room
-                }))
-                
-                // Notify other players
-                broadcastToRoom(message.roomId, {
-                  type: 'PLAYER_JOINED',
-                  data: {
-                    player: room.players.find(p => p.id === playerId),
-                    room
-                  }
-                }, playerId)
-                
-              } catch (error) {
-                socket.send(JSON.stringify({
-                  type: 'ERROR',
-                  success: false,
-                  message: error.message
-                }))
-              }
-              break
-              
-            case 'MAKE_MOVE':
-              try {
-                const room = makeMove(message.roomId, playerId, message.position)
-                
-                // Broadcast move to all players in room
-                broadcastToRoom(message.roomId, {
-                  type: 'MOVE_MADE',
-                  data: {
-                    playerId,
-                    position: message.position,
-                    gameState: room.gameState
-                  }
-                })
-                
-              } catch (error) {
-                socket.send(JSON.stringify({
-                  type: 'ERROR',
-                  success: false,
-                  message: error.message
-                }))
-              }
-              break
-              
-            case 'NEW_GAME':
-              try {
-                const room = resetGame(message.roomId)
-                
-                // Broadcast new game to all players
-                broadcastToRoom(message.roomId, {
-                  type: 'GAME_RESET',
-                  data: {
-                    gameState: room.gameState
-                  }
-                })
-                
-              } catch (error) {
-                socket.send(JSON.stringify({
-                  type: 'ERROR',
-                  success: false,
-                  message: error.message
-                }))
-              }
-              break
-              
-            case 'PING':
-              socket.send(JSON.stringify({
-                type: 'PONG',
-                timestamp: Date.now()
-              }))
-              break
-              
-            default:
-              socket.send(JSON.stringify({
-                type: 'ERROR',
-                success: false,
-                message: 'Unknown message type'
-              }))
-          }
-        } catch (error) {
-          socket.send(JSON.stringify({
-            type: 'ERROR',
-            success: false,
-            message: 'Invalid message format'
-          }))
-        }
-      }
-      
-      socket.onclose = () => {
-        // Mark player as disconnected in all rooms
-        for (const [roomId, room] of rooms) {
-          const player = room.players.find(p => p.id === playerId)
-          if (player) {
-            player.connected = false
+      switch (action) {
+        case 'CREATE_ROOM':
+          try {
+            const room = createRoom(playerId)
+            updateRoomActivity(room.id, 'room_created', { playerId })
             
-            // Notify other players
-            broadcastToRoom(roomId, {
-              type: 'PLAYER_DISCONNECTED',
-              data: { playerId, player }
-            }, playerId)
+            return new Response(JSON.stringify({
+              success: true,
+              data: room
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            })
+          } catch (error) {
+            return new Response(JSON.stringify({
+              success: false,
+              message: error.message
+            }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' }
+            })
           }
-        }
-        
-        connections.delete(playerId)
+          
+        case 'JOIN_ROOM':
+          try {
+            const room = joinRoom(body.roomId, playerId)
+            updateRoomActivity(body.roomId, 'player_joined', { 
+              playerId,
+              player: room.players.find(p => p.id === playerId)
+            })
+            
+            return new Response(JSON.stringify({
+              success: true,
+              data: room
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            })
+          } catch (error) {
+            return new Response(JSON.stringify({
+              success: false,
+              message: error.message
+            }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' }
+            })
+          }
+          
+        case 'MAKE_MOVE':
+          try {
+            const room = makeMove(body.roomId, playerId, body.position)
+            updateRoomActivity(body.roomId, 'move_made', {
+              playerId,
+              position: body.position,
+              gameState: room.gameState
+            })
+            
+            return new Response(JSON.stringify({
+              success: true,
+              data: {
+                gameState: room.gameState,
+                room: room
+              }
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            })
+          } catch (error) {
+            return new Response(JSON.stringify({
+              success: false,
+              message: error.message
+            }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' }
+            })
+          }
+          
+        case 'NEW_GAME':
+          try {
+            const room = resetGame(body.roomId)
+            updateRoomActivity(body.roomId, 'game_reset', {
+              gameState: room.gameState
+            })
+            
+            return new Response(JSON.stringify({
+              success: true,
+              data: {
+                gameState: room.gameState,
+                room: room
+              }
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            })
+          } catch (error) {
+            return new Response(JSON.stringify({
+              success: false,
+              message: error.message
+            }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' }
+            })
+          }
+          
+        default:
+          return new Response(JSON.stringify({
+            success: false,
+            message: 'Unknown action'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          })
       }
-      
-      socket.onerror = (error) => {
-        console.error('WebSocket error:', error)
-      }
-      
-      return response
     }
     
     // Handle HTTP requests
+// Handle GET requests for polling and room info
     if (req.method === 'GET') {
       const action = url.searchParams.get('action')
+      
+      if (action === 'room-state') {
+        const roomId = url.searchParams.get('roomId')
+        const lastUpdate = parseInt(url.searchParams.get('lastUpdate') || '0')
+        const room = rooms.get(roomId)
+        
+        if (!room) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: 'Room not found'
+          }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+        
+        // Only return data if there's been an update since last check
+        const hasUpdate = !lastUpdate || room.lastActivity > lastUpdate
+        
+        return new Response(JSON.stringify({
+          success: true,
+          hasUpdate,
+          data: hasUpdate ? {
+            room,
+            timestamp: Date.now()
+          } : null
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
       
       if (action === 'room-info') {
         const roomId = url.searchParams.get('roomId')

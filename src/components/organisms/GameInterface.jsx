@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "react-toastify";
-import RoomControls from "@/components/molecules/RoomControls";
 import gameService from "@/services/api/gameService";
 import Loading from "@/components/ui/Loading";
 import ErrorView from "@/components/ui/ErrorView";
 import GameControls from "@/components/molecules/GameControls";
 import ScorePanel from "@/components/molecules/ScorePanel";
+import RoomControls from "@/components/molecules/RoomControls";
 import GameBoard from "@/components/molecules/GameBoard";
 import GameStatus from "@/components/molecules/GameStatus";
 
@@ -157,10 +157,22 @@ const handleCellClick = useCallback(async (position) => {
     setMoveCount(prev => prev + 1)
     
     // In multiplayer, send move to other player
-    if (isMultiplayer) {
+if (isMultiplayer) {
       setIsMyTurn(false)
-      // Here you would send the move via WebSocket
-      // await gameService.sendMove(roomId, { position, player: currentPlayer, board: newBoard })
+      // Send the move via HTTP polling service
+      try {
+        await gameService.sendMove(roomId, position)
+      } catch (error) {
+        toast.error("Failed to send move", {
+          position: "top-right",
+          autoClose: 2000
+        })
+        // Revert the move on error
+        setBoard(board)
+        setCurrentPlayer(currentPlayer)
+        setMoveCount(moveCount)
+        setIsMyTurn(true)
+      }
     }
 
     // Check if game ended with this move
@@ -202,7 +214,7 @@ const handleCellClick = useCallback(async (position) => {
   }, [board, currentPlayer, winner, isDraw, loading, gameMode, difficulty, checkGameEnd, isMultiplayer, isMyTurn, playerRole, opponentConnected, roomId])
 
 // Start new game
-  const handleNewGame = () => {
+  const handleNewGame = async () => {
     setBoard(Array(9).fill(""))
     setCurrentPlayer("X")
     setWinner(null)
@@ -214,8 +226,15 @@ const handleCellClick = useCallback(async (position) => {
     // In multiplayer, reset turn state
     if (isMultiplayer) {
       setIsMyTurn(playerRole === "X")
-      // Here you would send new game request via WebSocket
-      // await gameService.requestNewGame(roomId)
+      // Send new game request via HTTP polling service
+      try {
+        await gameService.requestNewGame(roomId)
+      } catch (error) {
+        toast.error("Failed to start new game", {
+          position: "top-right",
+          autoClose: 2000
+        })
+      }
     }
     
     toast.info("🎮 New game started!", {
@@ -278,32 +297,44 @@ const handleCellClick = useCallback(async (position) => {
   }
 
   // Handle multiplayer events
-  useEffect(() => {
+useEffect(() => {
     if (!isMultiplayer || !roomId) return
 
-    // Simulate receiving moves from other player
-    // In real implementation, this would be WebSocket listeners
-    const handleOpponentMove = (moveData) => {
-      const { position, player, board: newBoard } = moveData
-      setBoard(newBoard)
-      setCurrentPlayer(player === "X" ? "O" : "X")
-      setMoveCount(prev => prev + 1)
-      setIsMyTurn(player !== playerRole)
+    // Set up polling-based room updates
+    const handleRoomUpdate = (room) => {
+      if (!room || !room.gameState) return
+
+      const { gameState } = room
       
-      toast.info(`Opponent played ${player} at position ${position + 1}`, {
-        position: "top-right",
-        autoClose: 2000
-      })
+      // Update game state from polling
+      setBoard(gameState.board)
+      setCurrentPlayer(gameState.currentPlayer)
+      setMoveCount(gameState.moveCount)
+      setWinner(gameState.winner)
+      setIsDraw(gameState.isDraw)
+      setWinningLine(gameState.winningLine)
+      
+      // Update turn state
+      if (gameState.winner || gameState.isDraw) {
+        setIsMyTurn(false)
+      } else {
+        setIsMyTurn(gameState.currentPlayer === playerRole)
+      }
+      
+      // Update opponent connection status
+      setOpponentConnected(room.players.length === 2)
     }
 
-    // Here you would set up WebSocket listeners
-    // gameService.onOpponentMove(handleOpponentMove)
-    // gameService.onPlayerDisconnect(() => setOpponentConnected(false))
-    // gameService.onPlayerReconnect(() => setOpponentConnected(true))
+    // Set up room update listener for polling
+    gameService.onRoomUpdate(handleRoomUpdate)
+
+    // Player disconnect/reconnect handlers
+    gameService.onPlayerDisconnect(() => setOpponentConnected(false))
+    gameService.onPlayerReconnect(() => setOpponentConnected(true))
 
     // Cleanup function
     return () => {
-      // gameService.removeAllListeners()
+      gameService.removeAllListeners()
     }
   }, [isMultiplayer, roomId, playerRole])
 
