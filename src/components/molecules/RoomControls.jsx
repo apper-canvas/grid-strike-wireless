@@ -1,6 +1,6 @@
 import { motion } from "framer-motion"
 import Button from "@/components/atoms/Button"
-import Card from "@/components/atoms/Card"
+import { Card } from "@/components/atoms/Card"
 import ApperIcon from "@/components/ApperIcon"
 import { cn } from "@/utils/cn"
 import { toast } from "react-toastify"
