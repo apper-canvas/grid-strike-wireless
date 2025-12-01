@@ -1,7 +1,8 @@
 import apper from 'https://cdn.apper.io/actions/apper-actions.js'
 
-// In-memory storage for active rooms (no connections needed for polling)
+// In-memory storage for rooms
 const rooms = new Map()
+
 function generateRoomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase()
 }
@@ -101,22 +102,21 @@ function makeMove(roomId, playerId, position) {
 }
 
 function checkWinner(board) {
-  const winningCombinations = [
-    [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-    [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
-    [0, 4, 8], [2, 4, 6] // Diagonals
+  const winPatterns = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8], // Horizontal
+    [0, 3, 6], [1, 4, 7], [2, 5, 8], // Vertical
+    [0, 4, 8], [2, 4, 6] // Diagonal
   ]
-  
-  for (let i = 0; i < winningCombinations.length; i++) {
-    const [a, b, c] = winningCombinations[i]
+
+  for (let i = 0; i < winPatterns.length; i++) {
+    const [a, b, c] = winPatterns[i]
     if (board[a] && board[a] === board[b] && board[a] === board[c]) {
       return {
         symbol: board[a],
-        line: winningCombinations[i]
+        line: winPatterns[i]
       }
     }
   }
-  
   return null
 }
 
@@ -269,8 +269,8 @@ apper.serve(async (req) => {
           })
       }
     }
-    
-// Handle GET requests for polling and room info
+
+    // Handle GET requests for room information and polling
     if (req.method === 'GET') {
       const action = url.searchParams.get('action')
       
@@ -341,21 +341,29 @@ apper.serve(async (req) => {
           headers: { 'Content-Type': 'application/json' }
         })
       }
+      
+      return new Response(JSON.stringify({
+        success: false,
+        message: 'Unknown GET action'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
     }
-    
+
+    // Handle unsupported HTTP methods
     return new Response(JSON.stringify({
       success: false,
-      message: 'Invalid request'
+      message: 'Method not allowed'
     }), {
-      status: 400,
+      status: 405,
       headers: { 'Content-Type': 'application/json' }
     })
     
-} catch (error) {
+  } catch (error) {
     return new Response(JSON.stringify({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: 'Internal server error: ' + error.message
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
