@@ -1,0 +1,121 @@
+@import 'react-toastify/dist/ReactToastify.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+.Toastify__toast-container {
+  z-index: 9999;
+}
+
+.Toastify__toast {
+  @apply bg-surface border border-primary/20 text-white font-sans text-sm;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5), 0 0 20px rgba(99, 102, 241, 0.1);
+}
+
+.Toastify__toast--success {
+  @apply bg-surface border-success/20;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5), 0 0 20px rgba(16, 185, 129, 0.1);
+}
+
+.Toastify__toast--error {
+  @apply bg-surface border-error/20;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5), 0 0 20px rgba(239, 68, 68, 0.1);
+}
+
+.Toastify__progress-bar--success {
+  @apply bg-success;
+}
+
+.Toastify__progress-bar--error {
+  @apply bg-error;
+}
+
+.Toastify__progress-bar {
+  @apply bg-primary;
+}
+
+@layer components {
+  .neon-text {
+    text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+  }
+  
+  .game-cell {
+    @apply bg-surface border-2 border-primary/20 rounded-lg flex items-center justify-center text-6xl font-bold cursor-pointer transition-all duration-200 hover:border-primary hover:shadow-neon aspect-square;
+  }
+  
+  .game-cell:hover {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+  }
+  
+  .game-cell.occupied {
+    @apply cursor-not-allowed;
+  }
+  
+  .game-cell.shake {
+    animation: shake 0.2s ease-in-out;
+  }
+  
+  .mark-x {
+    @apply text-primary;
+    text-shadow: 0 0 20px #6366f1, 0 0 40px #6366f1;
+  }
+  
+  .mark-o {
+    @apply text-secondary;
+    text-shadow: 0 0 20px #ec4899, 0 0 40px #ec4899;
+  }
+  
+  .win-line {
+    @apply absolute bg-gradient-to-r from-transparent via-success to-transparent rounded-full;
+    height: 4px;
+    box-shadow: 0 0 20px #10b981, 0 0 40px #10b981;
+    animation: drawLine 0.6s ease-out;
+  }
+  
+  .win-line-horizontal {
+    width: 100%;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    transform-origin: left center;
+  }
+  
+  .win-line-vertical {
+    width: 4px;
+    height: 100%;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    transform-origin: center top;
+    @apply bg-gradient-to-b from-transparent via-success to-transparent;
+  }
+  
+  .win-line-diagonal {
+    width: 141.42%;
+    top: 50%;
+    left: 50%;
+    transform-origin: center;
+  }
+  
+  .win-line-diagonal-1 {
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+  
+  .win-line-diagonal-2 {
+    transform: translate(-50%, -50%) rotate(-45deg);
+  }
+}

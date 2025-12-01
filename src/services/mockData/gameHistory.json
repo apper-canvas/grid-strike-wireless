@@ -1,0 +1,23 @@
+[
+  {
+    "Id": 1,
+    "board": ["X", "O", "X", "O", "X", "O", "", "", ""],
+    "winner": "X",
+    "moves": 5,
+    "timestamp": 1703875200000
+  },
+  {
+    "Id": 2,
+    "board": ["O", "X", "O", "X", "O", "X", "X", "O", "X"],
+    "winner": "draw",
+    "moves": 9,
+    "timestamp": 1703878800000
+  },
+  {
+    "Id": 3,
+    "board": ["", "O", "", "X", "O", "X", "", "O", ""],
+    "winner": "O",
+    "moves": 5,
+    "timestamp": 1703882400000
+  }
+]
