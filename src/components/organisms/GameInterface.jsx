@@ -1,16 +1,22 @@
-import { useState, useEffect, useCallback } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { toast } from "react-toastify"
-import GameBoard from "@/components/molecules/GameBoard"
-import GameStatus from "@/components/molecules/GameStatus"
-import ScorePanel from "@/components/molecules/ScorePanel"
-import GameControls from "@/components/molecules/GameControls"
-import Loading from "@/components/ui/Loading"
-import ErrorView from "@/components/ui/ErrorView"
-import gameService from "@/services/api/gameService"
+import React, { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { toast } from "react-toastify";
+import RoomControls from "@/components/molecules/RoomControls";
+import gameService from "@/services/api/gameService";
+import Loading from "@/components/ui/Loading";
+import ErrorView from "@/components/ui/ErrorView";
+import GameControls from "@/components/molecules/GameControls";
+import ScorePanel from "@/components/molecules/ScorePanel";
+import GameBoard from "@/components/molecules/GameBoard";
+import GameStatus from "@/components/molecules/GameStatus";
 
-const GameInterface = () => {
-  // Game state
+const GameInterface = ({ 
+  isMultiplayer = false, 
+  roomId = null, 
+  playerRole = null, 
+  players = [] 
+}) => {
+// Game state
   const [board, setBoard] = useState(Array(9).fill(""))
   const [currentPlayer, setCurrentPlayer] = useState("X")
   const [winner, setWinner] = useState(null)
@@ -19,8 +25,16 @@ const GameInterface = () => {
   const [moveCount, setMoveCount] = useState(0)
   
   // Game settings
-  const [gameMode, setGameMode] = useState("two-player")
+  const [gameMode, setGameMode] = useState(isMultiplayer ? "multiplayer" : "two-player")
   const [difficulty, setDifficulty] = useState("medium")
+  
+  // Multiplayer state
+  const [isMyTurn, setIsMyTurn] = useState(isMultiplayer ? playerRole === "X" : true)
+  const [opponentConnected, setOpponentConnected] = useState(isMultiplayer ? players.length === 2 : false)
+  const [roomState, setRoomState] = useState({
+    players: players || [],
+    spectators: 0
+  })
   
   // Scores
   const [scores, setScores] = useState({
@@ -32,7 +46,6 @@ const GameInterface = () => {
   // UI state
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-
   // Load initial scores from localStorage
   useEffect(() => {
     const savedScores = localStorage.getItem("gridStrikeScores")
@@ -108,13 +121,47 @@ const GameInterface = () => {
   }
 
   // Handle cell click
-  const handleCellClick = useCallback(async (position) => {
+const handleCellClick = useCallback(async (position) => {
     if (board[position] !== "" || winner || isDraw || loading) return
+    
+    // In multiplayer, check if it's the player's turn
+    if (isMultiplayer) {
+      if (!isMyTurn) {
+        toast.warning("It's not your turn!", {
+          position: "top-right",
+          autoClose: 1500
+        })
+        return
+      }
+      
+      if (currentPlayer !== playerRole) {
+        toast.warning("Wait for your turn!", {
+          position: "top-right",
+          autoClose: 1500
+        })
+        return
+      }
+      
+      if (!opponentConnected) {
+        toast.warning("Waiting for opponent to connect!", {
+          position: "top-right",
+          autoClose: 2000
+        })
+        return
+      }
+    }
 
     const newBoard = [...board]
     newBoard[position] = currentPlayer
     setBoard(newBoard)
     setMoveCount(prev => prev + 1)
+    
+    // In multiplayer, send move to other player
+    if (isMultiplayer) {
+      setIsMyTurn(false)
+      // Here you would send the move via WebSocket
+      // await gameService.sendMove(roomId, { position, player: currentPlayer, board: newBoard })
+    }
 
     // Check if game ended with this move
     if (checkGameEnd(newBoard)) return
@@ -122,6 +169,12 @@ const GameInterface = () => {
     // Switch to next player
     const nextPlayer = currentPlayer === "X" ? "O" : "X"
     setCurrentPlayer(nextPlayer)
+    
+    // In multiplayer, the turn will be handled by WebSocket events
+    if (isMultiplayer) {
+      // Turn management handled by real-time sync
+      return
+    }
 
     // AI move in single player mode
     if (gameMode === "single" && nextPlayer === "O") {
@@ -146,9 +199,9 @@ const GameInterface = () => {
         setLoading(false)
       }, 500)
     }
-  }, [board, currentPlayer, winner, isDraw, loading, gameMode, difficulty, checkGameEnd])
+  }, [board, currentPlayer, winner, isDraw, loading, gameMode, difficulty, checkGameEnd, isMultiplayer, isMyTurn, playerRole, opponentConnected, roomId])
 
-  // Start new game
+// Start new game
   const handleNewGame = () => {
     setBoard(Array(9).fill(""))
     setCurrentPlayer("X")
@@ -158,14 +211,29 @@ const GameInterface = () => {
     setMoveCount(0)
     setError("")
     
+    // In multiplayer, reset turn state
+    if (isMultiplayer) {
+      setIsMyTurn(playerRole === "X")
+      // Here you would send new game request via WebSocket
+      // await gameService.requestNewGame(roomId)
+    }
+    
     toast.info("🎮 New game started!", {
       position: "top-right",
       autoClose: 1500
     })
   }
 
-  // Change game mode
+  // Change game mode (not available in multiplayer)
   const handleModeChange = (mode) => {
+    if (isMultiplayer) {
+      toast.warning("Cannot change mode in multiplayer!", {
+        position: "top-right",
+        autoClose: 2000
+      })
+      return
+    }
+    
     if (moveCount > 0) {
       toast.warning("Finish current game to change mode!", {
         position: "top-right",
@@ -183,8 +251,16 @@ const GameInterface = () => {
     })
   }
 
-  // Change difficulty
+  // Change difficulty (not available in multiplayer)
   const handleDifficultyChange = (newDifficulty) => {
+    if (isMultiplayer) {
+      toast.warning("Cannot change difficulty in multiplayer!", {
+        position: "top-right",
+        autoClose: 2000
+      })
+      return
+    }
+    
     if (moveCount > 0) {
       toast.warning("Finish current game to change difficulty!", {
         position: "top-right",
@@ -200,6 +276,36 @@ const GameInterface = () => {
       autoClose: 2000
     })
   }
+
+  // Handle multiplayer events
+  useEffect(() => {
+    if (!isMultiplayer || !roomId) return
+
+    // Simulate receiving moves from other player
+    // In real implementation, this would be WebSocket listeners
+    const handleOpponentMove = (moveData) => {
+      const { position, player, board: newBoard } = moveData
+      setBoard(newBoard)
+      setCurrentPlayer(player === "X" ? "O" : "X")
+      setMoveCount(prev => prev + 1)
+      setIsMyTurn(player !== playerRole)
+      
+      toast.info(`Opponent played ${player} at position ${position + 1}`, {
+        position: "top-right",
+        autoClose: 2000
+      })
+    }
+
+    // Here you would set up WebSocket listeners
+    // gameService.onOpponentMove(handleOpponentMove)
+    // gameService.onPlayerDisconnect(() => setOpponentConnected(false))
+    // gameService.onPlayerReconnect(() => setOpponentConnected(true))
+
+    // Cleanup function
+    return () => {
+      // gameService.removeAllListeners()
+    }
+  }, [isMultiplayer, roomId, playerRole])
 
   // Clear scores
   const handleClearScore = () => {
@@ -259,11 +365,15 @@ const GameInterface = () => {
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.1 }}
           >
-            <GameStatus 
+<GameStatus 
               currentPlayer={currentPlayer}
               winner={winner}
               isDraw={isDraw}
               gameMode={gameMode}
+              isMultiplayer={isMultiplayer}
+              playerRole={playerRole}
+              isMyTurn={isMyTurn}
+              opponentConnected={opponentConnected}
             />
             
             <div className="relative">
@@ -298,16 +408,28 @@ const GameInterface = () => {
             animate={{ x: 0, opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.3 }}
             className="order-3"
-          >
-            <GameControls
-              gameMode={gameMode}
-              onModeChange={handleModeChange}
-              difficulty={difficulty}
-              onDifficultyChange={handleDifficultyChange}
-              onNewGame={handleNewGame}
-              onClearScore={handleClearScore}
-              isGameActive={isGameActive}
-            />
+>
+            {isMultiplayer ? (
+              <RoomControls
+                roomId={roomId}
+                players={roomState.players}
+                playerRole={playerRole}
+                onNewGame={handleNewGame}
+                onClearScore={handleClearScore}
+                isGameActive={isGameActive}
+                opponentConnected={opponentConnected}
+              />
+            ) : (
+              <GameControls
+                gameMode={gameMode}
+                onModeChange={handleModeChange}
+                difficulty={difficulty}
+                onDifficultyChange={handleDifficultyChange}
+                onNewGame={handleNewGame}
+                onClearScore={handleClearScore}
+                isGameActive={isGameActive}
+              />
+            )}
           </motion.div>
         </div>
       </div>

@@ -2,6 +2,113 @@ import gameHistoryData from "@/services/mockData/gameHistory.json"
 
 class GameService {
   constructor() {
+    this.socket = null
+    this.roomId = null
+    this.playerRole = null
+    this.eventListeners = new Map()
+  }
+
+  // WebSocket connection management
+  connectToRoom(roomId, playerRole) {
+    try {
+      // Initialize WebSocket connection
+      // In real implementation, this would connect to the room-websocket Edge Function
+      this.roomId = roomId
+      this.playerRole = playerRole
+      
+      // Simulate WebSocket connection
+      console.log(`Connecting to room ${roomId} as player ${playerRole}`)
+      
+      return true
+    } catch (error) {
+      console.error('Failed to connect to room:', error)
+      return false
+    }
+  }
+
+  // Send move to other players
+  async sendMove(roomId, moveData) {
+    if (!this.socket) {
+      console.warn('No WebSocket connection available')
+      return false
+    }
+
+    try {
+      // In real implementation, send via WebSocket to room-websocket Edge Function
+      const message = {
+        type: 'PLAYER_MOVE',
+        roomId,
+        data: moveData,
+        timestamp: Date.now()
+      }
+      
+      console.log('Sending move:', message)
+      // this.socket.send(JSON.stringify(message))
+      
+      return true
+    } catch (error) {
+      console.error('Failed to send move:', error)
+      return false
+    }
+  }
+
+  // Request new game
+  async requestNewGame(roomId) {
+    if (!this.socket) {
+      console.warn('No WebSocket connection available')
+      return false
+    }
+
+    try {
+      const message = {
+        type: 'NEW_GAME_REQUEST',
+        roomId,
+        timestamp: Date.now()
+      }
+      
+      console.log('Requesting new game:', message)
+      // this.socket.send(JSON.stringify(message))
+      
+      return true
+    } catch (error) {
+      console.error('Failed to request new game:', error)
+      return false
+    }
+  }
+
+  // Event listeners for multiplayer events
+  onOpponentMove(callback) {
+    this.eventListeners.set('opponentMove', callback)
+  }
+
+  onPlayerDisconnect(callback) {
+    this.eventListeners.set('playerDisconnect', callback)
+  }
+
+  onPlayerReconnect(callback) {
+    this.eventListeners.set('playerReconnect', callback)
+  }
+
+  onNewGameRequest(callback) {
+    this.eventListeners.set('newGameRequest', callback)
+  }
+
+  // Remove event listeners
+  removeAllListeners() {
+    this.eventListeners.clear()
+  }
+
+  // Disconnect from room
+  disconnect() {
+    if (this.socket) {
+      this.socket.close()
+      this.socket = null
+    }
+    this.roomId = null
+    this.playerRole = null
+    this.eventListeners.clear()
+  }
+  constructor() {
     this.gameHistory = [...gameHistoryData]
   }
 

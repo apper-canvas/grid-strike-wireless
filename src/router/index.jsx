@@ -6,6 +6,9 @@ const Layout = lazy(() => import("@/components/organisms/Layout"))
 
 // Pages
 const GamePage = lazy(() => import("@/components/pages/GamePage"))
+const CreateRoom = lazy(() => import("@/components/pages/CreateRoom"))
+const JoinRoom = lazy(() => import("@/components/pages/JoinRoom"))
+const GameRoom = lazy(() => import("@/components/pages/GameRoom"))
 const NotFound = lazy(() => import("@/components/pages/NotFound"))
 
 const LoadingFallback = () => (
@@ -24,6 +27,30 @@ const mainRoutes = [
     element: (
       <Suspense fallback={<LoadingFallback />}>
         <GamePage />
+      </Suspense>
+    )
+  },
+  {
+    path: "create-room",
+    element: (
+      <Suspense fallback={<LoadingFallback />}>
+        <CreateRoom />
+      </Suspense>
+    )
+  },
+  {
+    path: "join-room",
+    element: (
+      <Suspense fallback={<LoadingFallback />}>
+        <JoinRoom />
+      </Suspense>
+    )
+  },
+  {
+    path: "room/:roomId",
+    element: (
+      <Suspense fallback={<LoadingFallback />}>
+        <GameRoom />
       </Suspense>
     )
   },
