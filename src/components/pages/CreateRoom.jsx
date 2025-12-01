@@ -6,29 +6,23 @@ import Button from "@/components/atoms/Button"
 import { Card } from "@/components/atoms/Card"
 import ApperIcon from "@/components/ApperIcon"
 import Loading from "@/components/ui/Loading"
+import gameService from "@/services/api/gameService"
 
 const CreateRoom = () => {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [roomData, setRoomData] = useState(null)
-
-  const generateRoomId = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase()
-  }
-
-  const handleCreateRoom = async () => {
+const handleCreateRoom = async () => {
     setLoading(true)
     try {
-      const roomId = generateRoomId()
-      
-      // Simulate room creation delay
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const room = await gameService.createRoom()
       
       setRoomData({
-        roomId,
+        roomId: room.id,
         playerName: "Player 1",
-        playersCount: 1,
-        createdAt: new Date().toISOString()
+        playersCount: room.players.length,
+        createdAt: new Date().toISOString(),
+        room: room
       })
       
       toast.success("🎉 Room created successfully!", {
@@ -36,7 +30,8 @@ const CreateRoom = () => {
         autoClose: 2000
       })
     } catch (error) {
-      toast.error("Failed to create room. Please try again.", {
+      console.error('Room creation error:', error)
+      toast.error(`Failed to create room: ${error.message}`, {
         position: "top-right",
         autoClose: 3000
       })
@@ -46,7 +41,7 @@ const CreateRoom = () => {
   }
 
   const handleJoinRoom = () => {
-    if (roomData) {
+    if (roomData && roomData.roomId) {
       navigate(`/room/${roomData.roomId}`)
     }
   }
