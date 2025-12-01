@@ -7,7 +7,7 @@ import ApperIcon from "@/components/ApperIcon";
 import Loading from "@/components/ui/Loading";
 import Button from "@/components/atoms/Button";
 import GameInterface from "@/components/organisms/GameInterface";
-import { gameService } from "@/services/gameService";
+import gameService from "@/services/api/gameService";
 
 const GameRoom = () => {
   const { roomId } = useParams()
@@ -54,22 +54,24 @@ useEffect(() => {
           })
         }
 
-        // Set up room update listener
+// Set up room update listener
         gameService.onRoomUpdate((updatedRoom) => {
-          setRoomState(prev => ({
-            ...prev,
-            players: updatedRoom.players,
-            gameStarted: updatedRoom.players.length === 2,
-            waitingForPlayer: updatedRoom.players.length < 2
-          }))
+          setRoomState(prev => {
+            // Notify when second player joins
+            if (updatedRoom.players.length === 2 && prev.players.length === 1) {
+              toast.success("🎉 Player 2 joined! Game started!", {
+                position: "top-right",
+                autoClose: 3000
+              })
+            }
 
-          // Notify when second player joins
-          if (updatedRoom.players.length === 2 && prev.players.length === 1) {
-            toast.success("🎉 Player 2 joined! Game started!", {
-              position: "top-right",
-              autoClose: 3000
-            })
-          }
+            return {
+              ...prev,
+              players: updatedRoom.players,
+              gameStarted: updatedRoom.players.length === 2,
+              waitingForPlayer: updatedRoom.players.length < 2
+            }
+          })
         })
 
       } catch (error) {
