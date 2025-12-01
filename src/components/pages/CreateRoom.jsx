@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 import { toast } from "react-toastify"
 import Button from "@/components/atoms/Button"
-import Card from "@/components/atoms/Card"
+import { Card } from "@/components/atoms/Card"
 import ApperIcon from "@/components/ApperIcon"
 import Loading from "@/components/ui/Loading"
 
